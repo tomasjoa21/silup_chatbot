@@ -334,6 +334,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "본인의 *1차 실업인정일*을 입력해 주세요 (형식: `YYYY-MM-DD`):"
         )
         return SET_DATE
+    elif data == "apply_ingestion":
+        parsed = context.user_data.get("pending_ingestion")
+        if parsed:
+            result_msg = apply_ingested_data(chat_id, parsed)
+            await safe_reply(target_msg, result_msg)
+            # 갱신된 일정 보여주기
+            await status_cmd(update, context)
+            context.user_data.pop("pending_ingestion", None)
+        else:
+            await safe_reply(target_msg, "⚠️ 반영할 분석 데이터가 만료되었습니다. 파일을 다시 전송해 주세요.")
+    elif data == "cancel_ingestion":
+        context.user_data.pop("pending_ingestion", None)
+        await safe_reply(target_msg, "❌ 문서 분석 반영이 취소되었습니다. 기존 정보가 그대로 유지됩니다.")
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -386,6 +399,75 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     answer = ask_question(raw_text)
     await safe_reply(update.message, answer)
 
+from src.ingestion import extract_text_from_pdf, analyze_document_content, apply_ingested_data
+import tempfile
+
+async def handle_document_or_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    사용자가 PDF나 수첩 사진을 전송했을 때 자동 감지하여 AI 분석 수행
+    """
+    target_msg = update.effective_message
+    chat_id = update.effective_chat.id
+    
+    await safe_reply(target_msg, "📥 *새로운 교육자료/수첩 문서를 수신했습니다!*\nAI가 내용을 정밀 분석하고 있습니다. 잠시만 기다려 주세요 (약 5~10초)...")
+    await target_msg.chat.send_action("typing")
+    
+    parsed = None
+    
+    # 1. PDF 문서인 경우
+    if update.message.document:
+        doc = update.message.document
+        if doc.file_name.lower().endswith(".pdf"):
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                file_obj = await doc.get_file()
+                await file_obj.download_to_drive(tmp.name)
+                tmp_path = tmp.name
+                
+            pdf_text = extract_text_from_pdf(tmp_path)
+            parsed = analyze_document_content(text_content=pdf_text)
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+        else:
+            await safe_reply(target_msg, "⚠️ 현재는 PDF 문서 및 사진(JPG, PNG)만 자동 분석을 지원합니다.")
+            return
+            
+    # 2. 사진 이미지인 경우
+    elif update.message.photo:
+        photo = update.message.photo[-1] # 가장 해상도 높은 사진
+        file_obj = await photo.get_file()
+        img_bytes = await file_obj.download_as_bytearray()
+        parsed = analyze_document_content(image_bytes=bytes(img_bytes), mime_type="image/jpeg")
+
+    if not parsed or "error" in parsed:
+        err_msg = parsed.get("error", "알 수 없는 오류") if parsed else "분석 실패"
+        await safe_reply(target_msg, f"⚠️ 문서 분석 중 오류가 발생했습니다: {err_msg}\n자료가 선명한지 확인 후 다시 시도해 주세요.")
+        return
+
+    # 분석 결과 캐싱 (승인 대기)
+    context.user_data["pending_ingestion"] = parsed
+    
+    user_info = parsed.get("user_info", {})
+    rules_update = parsed.get("rules_update", {})
+    
+    preview_text = (
+        "🔍 *[새 문서 분석 결과 요약]*\n\n"
+        f"• 감지된 성명: *{user_info.get('name', '수급자')}*\n"
+        f"• 1차 실업인정일: *{user_info.get('first_date', '미확인')}*\n"
+        f"• 수급 유형: *{user_info.get('user_type', '일반수급자')}*\n"
+        f"• 소정급여일수: *{user_info.get('total_days', 150)}일*\n"
+        f"• 관할 창구: *{user_info.get('center_window', '고용센터')}*\n\n"
+        f"📌 *확인된 최신 지침*:\n{rules_update.get('summary', '특이 지침 없음')}\n\n"
+        "이 분석 결과를 내 일정과 비서봇 지식 베이스에 반영하시겠습니까?"
+    )
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ 내 일정 & 지식에 반영하기", callback_data="apply_ingestion"),
+         InlineKeyboardButton("❌ 취소", callback_data="cancel_ingestion")]
+    ])
+    await safe_reply(target_msg, preview_text, reply_markup=keyboard)
+
 def main():
     init_db()
     
@@ -418,6 +500,9 @@ def main():
     
     # 인라인 버튼 핸들러
     app.add_handler(CallbackQueryHandler(handle_callback))
+    
+    # PDF 문서 및 사진 자동 수신 핸들러 추가
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document_or_photo))
     
     # 일반 텍스트 질문 핸들러
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
