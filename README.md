@@ -1,5 +1,9 @@
 # 🤖 고용노동부 실업급여 전문 전담 비서봇 (Silup Assistant Bot)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
+
 > **"실업인정일, 구직활동 숙제, 증빙 서류를 단 하루도 놓치지 않는 가장 똑똑한 1:1 전담 비서"**  
 > 고용노동부 공식 실업인정 집체교육 자료 및 취업드림수첩 지침을 전수 분석하여 이식한 **텔레그램 기반 스마트 실업급여 관리 봇**입니다.
 
@@ -95,5 +99,31 @@ docker compose up -d
 
 ---
 
-## 📄 라이선스
+## 📄 라이선스 (License)
+
+이 프로젝트는 [MIT License](LICENSE)에 따라 배포됩니다.
+
+```text
 MIT License
+
+Copyright (c) 2026 tomasjoa
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
