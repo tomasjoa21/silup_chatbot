@@ -1,0 +1,93 @@
+{
+  "general_info": {
+    "center_window": "3층 11번 창구 (실업급여팀)",
+    "center_window_sub": "2층 11번 창구 또는 3층 11번 창구 (수첩 표지 확인)",
+    "phone_counsel": "1350 (고용노동부 고객상담센터)",
+    "phone_system": "1577-7114 (고용24 전산오류 문의)",
+    "phone_window_time": "오후 3시 이후 권장 (오전은 현장 방문자 집중)",
+    "submit_window_time": "실업인정일 당일 00:00 ~ 17:00 (가급적 오전 09:00~11:00 전송 권장)"
+  },
+  "types": {
+    "일반수급자": {
+      "name": "일반 수급자",
+      "rules": {
+        "1": {
+          "attendance": "출석형 또는 온라인 교육",
+          "required_count": 1,
+          "activity_type": "1차 실업인정교육",
+          "note": "온라인 또는 집체교육 이수"
+        },
+        "2": {
+          "attendance": "온라인 전송",
+          "required_count": 1,
+          "activity_type": "구직활동 또는 구직외활동 1회 선택",
+          "cycle_weeks": 4
+        },
+        "3": {
+          "attendance": "온라인 전송",
+          "required_count": 1,
+          "activity_type": "구직활동 또는 구직외활동 1회 선택",
+          "cycle_weeks": 4
+        },
+        "4": {
+          "attendance": "센터 의무 출석 (3층 11번 창구)",
+          "required_count": 1,
+          "activity_type": "구직활동 또는 구직외활동 1회 선택",
+          "cycle_weeks": 4,
+          "note": "4차는 의무 출석일이므로 신분증과 취업드림수첩 지참 후 방문 필수"
+        },
+        "5+": {
+          "attendance": "온라인 전송",
+          "required_count": 2,
+          "activity_type": "구직활동 1회 이상 반드시 포함 (총 2회)",
+          "cycle_weeks": 4,
+          "note": "2개 활동은 서로 다른 날에 진행해야 함 (하루 1건만 인정)"
+        }
+      }
+    },
+    "반복수급자": {
+      "name": "반복 수급자 (이직 전 5년 동안 3회 이상 수급자)",
+      "rules": {
+        "1": { "attendance": "센터 출석", "required_count": 1, "activity_type": "1차 실업인정교육" },
+        "2": { "attendance": "온라인 전송", "required_count": 1, "activity_type": "구직활동만 가능 (구직외활동 불가)", "cycle_weeks": 4 },
+        "3": { "attendance": "온라인 전송", "required_count": 1, "activity_type": "구직활동만 가능 (구직외활동 불가)", "cycle_weeks": 4 },
+        "4": { "attendance": "센터 의무 출석", "required_count": 2, "activity_type": "구직활동만 가능 (총 2건)", "cycle_weeks": 4 },
+        "5+": { "attendance": "온라인 전송", "required_count": 2, "activity_type": "구직활동만 가능 (총 2건, 다른 날짜)", "cycle_weeks": 4 }
+      }
+    },
+    "장기수급자": {
+      "name": "장기 수급자 (소정급여일수 210일 이상)",
+      "rules": {
+        "1": { "attendance": "센터 출석", "required_count": 1, "activity_type": "1차 실업인정교육" },
+        "2~4": { "attendance": "온라인 전송 (4차는 방문)", "required_count": 1, "activity_type": "구직활동 또는 구직외활동 1회", "cycle_weeks": 4 },
+        "5~7": { "attendance": "온라인 전송", "required_count": 2, "activity_type": "구직활동 1회 이상 포함 총 2회", "cycle_weeks": 4 },
+        "8+": { "attendance": "센터 의무 출석 (최종 직전 회차 등)", "required_count": 2, "activity_type": "구직활동만 2회 (1주 1회 꼴)", "cycle_weeks": 1 }
+      }
+    },
+    "만60세이상_장애인": {
+      "name": "만 60세 이상 또는 장애인 수급자",
+      "rules": {
+        "all": {
+          "attendance": "온라인 전송 (4차 등 지정일 방문)",
+          "required_count": 1,
+          "activity_type": "모든 차수 구직활동 또는 구직외활동 자유 선택 (1건만)",
+          "cycle_weeks": 4
+        }
+      }
+    }
+  },
+  "limits": {
+    "online_lecture_max": 2,
+    "career_psychology_test_max": 1,
+    "psychological_stability_program_max": 1,
+    "same_day_activity_limit": 1,
+    "date_change_limit": 1,
+    "date_change_window_days": 14,
+    "part_time_labor_ratio_limit": "차수 인정기간의 1/3 미만"
+  },
+  "early_reemployment_bonus": {
+    "qualification": "소정급여일수의 1/2 도래 전 재취업하여 12개월(만 65세 이상은 6개월) 이상 계속 고용",
+    "amount": "남은 구직급여 일수의 1/2",
+    "exceptions": "이직 전 사업주에게 재고용, 대기업/고소득(월 574만원 이상), 공무원 임용 제외"
+  }
+}

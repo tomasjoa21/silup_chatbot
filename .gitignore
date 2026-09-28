@@ -1,0 +1,34 @@
+# 환경 변수 및 인증 키 (매우 중요)
+.env
+*.env
+*.key
+*.pem
+
+# 개인 수급자료 및 민감한 원본 파일 (절대 커밋 금지)
+_reference/
+extracted/
+test_integration.py
+src/real_data.py
+
+# 데이터베이스 및 볼륨 데이터
+data/
+*.db
+*.sqlite3
+
+# 파이썬 캐시 및 가상환경
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# IDE 및 시스템 임시 파일
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+*.log

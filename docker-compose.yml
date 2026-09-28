@@ -1,0 +1,11 @@
+services:
+  silup-bot:
+    build: .
+    container_name: silup-assistant-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/silup/data
+      - ./knowledge:/silup/knowledge
+      - ./src:/silup/src
