@@ -1,6 +1,6 @@
 import logging
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
@@ -77,7 +77,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 내 전체 일정 조회", callback_data="view_status"),
-             InlineKeyboardButton("📅 스마트폰 캘린더(.ics) 받기", callback_data="download_ics")],
+             InlineKeyboardButton("📅 구글/스마트폰 캘린더에 일정 등록", callback_data="download_ics")],
             [InlineKeyboardButton("📄 증빙서류 제출 가이드", callback_data="faq_doc"),
              InlineKeyboardButton("❓ 자주 묻는 질문 (FAQ)", callback_data="view_faq")]
         ])
@@ -173,7 +173,7 @@ async def received_total_days(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 내 전체 일정 확인", callback_data="view_status")],
-        [InlineKeyboardButton("📅 캘린더(.ics) 다운로드", callback_data="download_ics")]
+        [InlineKeyboardButton("📅 구글/스마트폰 캘린더에 일정 등록", callback_data="download_ics")]
     ])
     
     await query.edit_message_text(
@@ -203,6 +203,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = get_user(chat_id)
         
     schedules = get_user_schedules(chat_id)
+    today_str = date.today().strftime("%Y-%m-%d")
     next_s = get_next_schedule(chat_id, today_str)
     
     first_d = datetime.strptime(user["first_recognition_date"], "%Y-%m-%d").date()
@@ -238,18 +239,15 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{is_past}*{r_num}차*: {r_date} ({r_type}) - {r_act}\n"
         
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📅 스마트폰 캘린더 등록 (.ics)", callback_data="download_ics")],
+        [InlineKeyboardButton("📅 구글/스마트폰 캘린더에 일정 등록", callback_data="download_ics")],
         [InlineKeyboardButton("❓ 질문하기 (FAQ)", callback_data="view_faq")]
     ])
     await safe_reply(target_msg, text, reply_markup=keyboard)
 
 from src.calendar_gen import generate_ics_calendar, get_google_calendar_url
-
-async def calendar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    target_msg = update.effective_message
+async def send_calendar_with_options(target_msg, chat_id: int):
     user = get_user(chat_id)
-    if not user:
+    if not user and HAS_LOCAL_SEED and bind_real_user_data:
         bind_real_user_data(chat_id)
         user = get_user(chat_id)
         
@@ -270,16 +268,17 @@ async def calendar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             req_count=next_s["required_count"],
             note=next_s["note"] or ""
         )
-        keyboard_buttons.append([InlineKeyboardButton(f"🔗 {next_s['round_num']}차 구글 캘린더에 바로 추가하기", url=gcal_url)])
-        
-    keyboard = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
+        keyboard_buttons.append([InlineKeyboardButton(f"🔗 {next_s['round_num']}차 구글 캘린더 바로 등록", url=gcal_url)])
+    keyboard_buttons.append([InlineKeyboardButton("📊 내 전체 일정표 보기", callback_data="view_status")])
+    keyboard = InlineKeyboardMarkup(keyboard_buttons)
     
+    next_round_str = f"{next_s['round_num']}차({next_s['recognition_date']})" if next_s else "인정일"
     caption_text = (
-        "📅 *실업급여 전체 11회차 일정 캘린더*\n\n"
-        "1️⃣ *구글 캘린더에 11회차 한 번에 일괄 등록하는 법*:\n"
-        "• 다운로드한 `.ics` 파일을 [Google 캘린더 웹(calendar.google.com)]의 [설정 → 가져오기 및 내보내기 → 가져오기]에서 업로드하시면 1~11차 전체 일정이 구글 캘린더에 1초 만에 등록됩니다!\n\n"
-        "2️⃣ *다가오는 회차 구글 캘린더 바로 등록*:\n"
-        "• 아래 버튼을 누르시면 브라우저에서 구글 캘린더 새 일정 추가 화면이 바로 열립니다."
+        "📅 *실업급여 전체 실업인정 캘린더 등록*\n\n"
+        "✨ *동일 일정 중복 방지 & 자동 편집(갱신)*\n"
+        "• 전송된 `.ics` 파일을 클릭하여 스마트폰(구글/삼성/애플) 캘린더에 추가하세요.\n"
+        "• **이미 등록된 일정이 있더라도 중복 생성되지 않고 최신 일정 및 지침으로 자동 갱신(편집)**됩니다.\n\n"
+        f"💡 다가오는 *{next_round_str}*만 구글 캘린더 웹에서 즉시 추가하시려면 아래 버튼을 누르세요!"
     )
     
     await target_msg.reply_document(
@@ -288,6 +287,11 @@ async def calendar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
         reply_markup=keyboard
     )
+
+async def calendar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    target_msg = update.effective_message
+    await send_calendar_with_options(target_msg, chat_id)
 
 async def faq_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_msg = update.effective_message
@@ -317,14 +321,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "view_status":
         await status_cmd(update, context)
     elif data == "download_ics":
-        ics_data = generate_ics_calendar(chat_id)
-        bio = io.BytesIO(ics_data)
-        bio.name = f"silup_schedule_{chat_id}.ics"
-        await target_msg.reply_document(
-            document=bio,
-            caption="📅 *실업급여 전체 11회차 일정 캘린더 파일 (.ics)*\n\n클릭하여 스마트폰 캘린더 앱에 저장하세요!",
-            parse_mode="Markdown"
-        )
+        await send_calendar_with_options(target_msg, chat_id)
     elif data == "view_faq":
         await faq_cmd(update, context)
     elif data == "start_setup":
@@ -348,6 +345,40 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("pending_ingestion", None)
         await safe_reply(target_msg, "❌ 문서 분석 반영이 취소되었습니다. 기존 정보가 그대로 유지됩니다.")
 
+def build_user_context(chat_id: int) -> str:
+    user = get_user(chat_id)
+    if not user:
+        return ""
+    schedules = get_user_schedules(chat_id)
+    first_d = datetime.strptime(user["first_recognition_date"], "%Y-%m-%d").date()
+    tot_days = user["total_benefit_days"]
+    half_d = first_d + timedelta(days=tot_days // 2)
+    last_date = schedules[-1]["recognition_date"] if schedules else (first_d + timedelta(days=tot_days)).strftime("%Y-%m-%d")
+    
+    ctx = f"• 수급자 성명: {user['user_name']}\n"
+    ctx += f"• 수급 유형: {user['user_type']}\n"
+    ctx += f"• 관할 창구: {user['center_window']}\n"
+    ctx += f"• 1차 실업인정일: {user['first_recognition_date']}\n"
+    ctx += f"• 소정급여일수: {user['total_benefit_days']}일 (만료일: {last_date})\n"
+    ctx += f"• 조기재취업 1/2 시점: {half_d.strftime('%Y-%m-%d')}\n"
+    ctx += f"• 오늘 기준 일자: {date.today().strftime('%Y-%m-%d')}\n"
+    
+    if HAS_LOCAL_SEED and REAL_USER_DATA and "daily_benefit" in REAL_USER_DATA:
+        daily = REAL_USER_DATA["daily_benefit"]
+        ctx += f"• 1일 구직급여액: {daily:,.2f}원 (1회차 8일분 급여: 약 {int(daily * 8):,}원, 28일분 급여: 약 {int(daily * 28):,}원)\n"
+        
+    if schedules:
+        ctx += "\n[전체 회차별 실업인정 상세 일정표]\n"
+        for s in schedules:
+            ctx += (
+                f"- {s['round_num']}차: 인정일 {s['recognition_date']} "
+                f"(인정기간: {s['period_start']}~{s['period_end']}) | "
+                f"출석방식: {s['attendance_type']} | "
+                f"활동: {s['activity_type']} ({s['required_count']}건) | "
+                f"메모: {s['note'] or '없음'}\n"
+            )
+    return ctx
+
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     raw_text = update.message.text.strip()
@@ -361,43 +392,38 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         bind_real_user_data(chat_id)
         user = get_user(chat_id)
 
-    # 내 일정/회차 관련 질문인 경우 (정확한 일정표 기반 답변)
-    if user and any(keyword in raw_text for keyword in ["일정", "회차", "인정일", "파악", "언제", "스케줄"]):
-        schedules = get_user_schedules(chat_id)
-        if schedules:
-            today_str = date.today().strftime("%Y-%m-%d")
-            next_s = get_next_schedule(chat_id, today_str)
-            first_d = datetime.strptime(user["first_recognition_date"], "%Y-%m-%d").date()
-            tot_days = user["total_benefit_days"]
-            half_d = first_d + timedelta(days=tot_days // 2)
-            last_date = schedules[-1]["recognition_date"] if schedules else (first_d + timedelta(days=tot_days)).strftime("%Y-%m-%d")
-            
-            text = f"네, *{user['user_name']}님의 전체 실업인정 일정*을 완벽히 파악하고 관리하고 있습니다! 😊\n\n"
-            text += f"• 관할: *{user['center_window']}*\n"
-            text += f"• 소정급여일수: *{user['total_benefit_days']}일* (만료일: {last_date})\n"
-            text += f"• 조기재취업 1/2 시점: *{half_d.strftime('%Y-%m-%d')}*\n\n"
-            if next_s:
-                recog_d = datetime.strptime(next_s["recognition_date"], "%Y-%m-%d").date()
-                d_day = (recog_d - date.today()).days
-                d_str = "오늘" if d_day == 0 else f"{d_day}일 남음"
-                text += f"🔥 *가장 가까운 인정일: {next_s['round_num']}차 ({next_s['recognition_date']})* [{d_str}]\n"
-                text += f"• 출석 형태: *{next_s['attendance_type']}*\n"
-                text += f"• 필수 활동: *{next_s['activity_type']}* ({next_s['required_count']}건)\n"
-                text += f"• 활동 인정 기간: *{next_s['period_start']} ~ {next_s['period_end']}*\n"
-                if next_s["note"]:
-                    text += f"• 💡 메모: {next_s['note']}\n"
-                text += "\n"
-            text += "아래 버튼을 누르시면 전체 1~11회차 타임라인을 한눈에 보실 수 있습니다."
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📊 1~11차 전체 타임라인 보기", callback_data="view_status")],
-                [InlineKeyboardButton("📅 스마트폰 캘린더(.ics) 다운로드", callback_data="download_ics")]
-            ])
-            await safe_reply(update.message, text, reply_markup=keyboard)
-            return
+    # 사용자 개인 컨텍스트 구성
+    user_context = build_user_context(chat_id)
 
-    # 일반 질문: Gemini API + 지식베이스 질의응답
-    answer = ask_question(raw_text)
-    await safe_reply(update.message, answer)
+    # Gemini API + 지식베이스 + 개인 수급 정보 종합 질의응답
+    answer = ask_question(raw_text, user_context=user_context)
+    
+    # 상황별 인라인 퀵 버튼 구성 (UX 최적화)
+    reply_markup = None
+    is_fallback = any(w in answer for w in ["죄송합니다", "지연이 발생했습니다", "확인하기 어렵습니다", "명확한 근거를"])
+    is_schedule_query = any(k in raw_text for k in ["일정", "회차", "인정일", "스케줄", "신청일", "날짜", "언제"])
+    
+    if is_schedule_query:
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 1~11차 전체 타임라인 보기", callback_data="view_status")],
+            [InlineKeyboardButton("📅 구글/스마트폰 캘린더에 일정 등록", callback_data="download_ics")]
+        ])
+    elif is_fallback:
+        # 질문에 바로 답하지 못했을 때 헤매지 않도록 공식 핵심 바로가기 버튼 제공
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📄 증빙서류 제출 방법", callback_data="faq_doc"),
+             InlineKeyboardButton("🔄 실업인정일 착오 변경", callback_data="faq_change")],
+            [InlineKeyboardButton("📊 내 전체 일정 확인", callback_data="view_status"),
+             InlineKeyboardButton("❓ 자주 묻는 질문 (FAQ)", callback_data="view_faq")]
+        ])
+    else:
+        # 일반 질문 답변 후에도 언제든 일정을 볼 수 있는 보조 퀵 버튼
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 내 전체 일정 조회", callback_data="view_status"),
+             InlineKeyboardButton("❓ 자주 묻는 질문 (FAQ)", callback_data="view_faq")]
+        ])
+        
+    await safe_reply(update.message, answer, reply_markup=reply_markup)
 
 from src.ingestion import extract_text_from_pdf, analyze_document_content, apply_ingested_data
 import tempfile

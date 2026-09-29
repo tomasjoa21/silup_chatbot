@@ -20,6 +20,10 @@ def generate_ics_calendar(chat_id: int) -> bytes:
         
         # 1. 실업인정일 당일 이벤트
         ev = Event()
+        # 동일 회차 일정이 이미 존재하는 경우 중복 생성을 막고 자동 갱신(편집)하도록 고유 UID 부여
+        ev.add('uid', f'silup-{chat_id}-round-{s["round_num"]}@silup.assistant')
+        ev.add('sequence', 1)
+        ev.add('status', 'CONFIRMED')
         ev.add('summary', f'[실업급여] {s["round_num"]}차 실업인정일 ({s["attendance_type"]})')
         
         desc = (
@@ -55,6 +59,9 @@ def generate_ics_calendar(chat_id: int) -> bytes:
         if s["round_num"] > 1:
             start_date = datetime.strptime(s["period_start"], "%Y-%m-%d").date()
             ev_start = Event()
+            ev_start.add('uid', f'silup-{chat_id}-round-{s["round_num"]}-start@silup.assistant')
+            ev_start.add('sequence', 1)
+            ev_start.add('status', 'CONFIRMED')
             ev_start.add('summary', f'[실업급여] {s["round_num"]}차 구직활동 기간 시작')
             ev_start.add('description', f'{s["round_num"]}차 구직활동을 진행할 수 있는 기간입니다.\n마감 인정일: {s["recognition_date"]}\n필요활동: {s["activity_type"]}')
             ev_start.add('dtstart', start_date)
