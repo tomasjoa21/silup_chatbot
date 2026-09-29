@@ -22,9 +22,16 @@ def init_db():
         first_recognition_date TEXT NOT NULL,
         total_benefit_days INTEGER DEFAULT 150,
         center_window TEXT DEFAULT '3층 11번 창구',
+        google_email TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    
+    # 기존 DB에 google_email 컬럼이 없는 경우 자동 마이그레이션
+    cursor.execute("PRAGMA table_info(users)")
+    cols = [row["name"] for row in cursor.fetchall()]
+    if "google_email" not in cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN google_email TEXT DEFAULT ''")
     
     # 2. 회차별 실업인정 일정 테이블
     cursor.execute("""
@@ -223,3 +230,14 @@ def update_reminder_flag(schedule_id: int, flag_name: str):
     conn.execute(f"UPDATE schedules SET {flag_name} = 1 WHERE id = ?", (schedule_id,))
     conn.commit()
     conn.close()
+
+def update_user_google_email(chat_id: int, email: str) -> bool:
+    """
+    사용자의 연동 구글 계정(Gmail) 이메일 주소 등록 및 갱신
+    """
+    conn = get_db()
+    conn.execute("UPDATE users SET google_email = ? WHERE chat_id = ?", (email.strip(), chat_id))
+    conn.commit()
+    conn.close()
+    return True
+

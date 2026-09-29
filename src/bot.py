@@ -10,7 +10,7 @@ from telegram.ext import (
 from src.config import TELEGRAM_BOT_TOKEN
 from src.database import (
     init_db, save_user_and_generate_schedule, get_user,
-    get_user_schedules, get_next_schedule
+    get_user_schedules, get_next_schedule, update_user_google_email
 )
 from src.calendar_gen import generate_ics_calendar
 from src.scheduler import start_scheduler
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # 대화 위저드 상태
 SET_DATE, SET_TYPE, SET_DAYS = range(3)
+WAIT_EMAIL = 10
 
 # 로컬 전용 실물 데이터가 있는 경우 로드 (깃허브 오픈소스 배포 시 제외됨)
 try:
@@ -254,6 +255,14 @@ async def send_calendar_with_options(target_msg, chat_id: int):
     today_str = date.today().strftime("%Y-%m-%d")
     next_s = get_next_schedule(chat_id, today_str)
     
+    # 등록된 구글 계정 확인
+    google_email = ""
+    if user:
+        try:
+            google_email = user["google_email"] if user["google_email"] else ""
+        except (KeyError, IndexError):
+            google_email = ""
+    
     ics_data = generate_ics_calendar(chat_id)
     bio = io.BytesIO(ics_data)
     bio.name = f"silup_schedule_{chat_id}.ics"
@@ -266,15 +275,23 @@ async def send_calendar_with_options(target_msg, chat_id: int):
             attend_type=next_s["attendance_type"],
             act_type=next_s["activity_type"],
             req_count=next_s["required_count"],
-            note=next_s["note"] or ""
+            note=next_s["note"] or "",
+            google_email=google_email
         )
         keyboard_buttons.append([InlineKeyboardButton(f"🔗 {next_s['round_num']}차 구글 캘린더 바로 등록", url=gcal_url)])
+    
+    # 구글 계정 이메일 등록/변경 버튼
+    email_btn_text = f"✉️ 구글 계정 변경 ({google_email})" if google_email else "✉️ 구글 계정 연동 (Gmail)"
+    keyboard_buttons.append([InlineKeyboardButton(email_btn_text, callback_data="change_google_email")])
     keyboard_buttons.append([InlineKeyboardButton("📊 내 전체 일정표 보기", callback_data="view_status")])
     keyboard = InlineKeyboardMarkup(keyboard_buttons)
     
     next_round_str = f"{next_s['round_num']}차({next_s['recognition_date']})" if next_s else "인정일"
+    email_status_str = f"• 연동 계정: `{google_email}` (해당 계정으로 즉시 오픈)\n" if google_email else "• 연동 계정: *미등록* (아래 버튼으로 Gmail 등록 시 해당 계정으로 직행)\n"
+    
     caption_text = (
         "📅 *실업급여 전체 실업인정 캘린더 등록*\n\n"
+        f"{email_status_str}"
         "✨ *동일 일정 중복 방지 & 자동 편집(갱신)*\n"
         "• 전송된 `.ics` 파일을 클릭하여 스마트폰(구글/삼성/애플) 캘린더에 추가하세요.\n"
         "• **이미 등록된 일정이 있더라도 중복 생성되지 않고 최신 일정 및 지침으로 자동 갱신(편집)**됩니다.\n\n"
@@ -292,6 +309,77 @@ async def calendar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     target_msg = update.effective_message
     await send_calendar_with_options(target_msg, chat_id)
+
+async def start_email_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    target_msg = update.effective_message
+    if update.callback_query:
+        await update.callback_query.answer()
+        
+    # /email 명령어에 직접 인자를 넘긴 경우 (예: /email test@gmail.com)
+    if context.args:
+        new_email = context.args[0].strip()
+        if "@" in new_email and "." in new_email:
+            update_user_google_email(chat_id, new_email)
+            await safe_reply(
+                target_msg,
+                f"✅ 연동 구글 계정이 *{new_email}*로 성공적으로 변경되었습니다!\n"
+                "다음 수정 전까지 영구적으로 유지되며, 캘린더 링크를 누르면 항상 이 계정으로 열립니다. 😊"
+            )
+            await send_calendar_with_options(target_msg, chat_id)
+            return ConversationHandler.END
+        else:
+            await safe_reply(target_msg, "⚠️ 올바른 이메일 형식이 아닙니다. (예: `example@gmail.com`)")
+            return WAIT_EMAIL
+
+    user = get_user(chat_id)
+    current_email = "없음 (미등록)"
+    if user:
+        try:
+            if user["google_email"]:
+                current_email = user["google_email"]
+        except (KeyError, IndexError):
+            pass
+            
+    text = (
+        "✉️ *구글 캘린더 연동 계정 설정/변경*\n\n"
+        f"• 현재 등록된 계정: `{current_email}`\n\n"
+        "캘린더 일정을 연동할 본인의 *구글 이메일(Gmail 주소)*을 채팅창에 입력해 주세요.\n"
+        "(예: `example@gmail.com`)\n\n"
+        "취소하시려면 /cancel 을 입력하세요."
+    )
+    await safe_reply(target_msg, text)
+    return WAIT_EMAIL
+
+async def received_google_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    target_msg = update.effective_message
+    text = update.message.text.strip()
+    
+    if text.startswith("/cancel"):
+        await update.message.reply_text("구글 계정 변경이 취소되었습니다.")
+        return ConversationHandler.END
+        
+    if "@" not in text or "." not in text or len(text) < 5:
+        await update.message.reply_text(
+            "⚠️ 올바른 이메일 형식이 아닙니다. 다시 입력해 주세요.\n(예: `abc@gmail.com` / 취소: /cancel)",
+            parse_mode="Markdown"
+        )
+        return WAIT_EMAIL
+        
+    update_user_google_email(chat_id, text)
+    await update.message.reply_text(
+        f"🎉 *구글 계정 이메일이 저장되었습니다!*\n\n"
+        f"• 연동 계정: `{text}`\n\n"
+        "다음 번 수정 전까지 영구적으로 유지되며, 캘린더 등록 시 항상 이 계정으로 바로 열립니다. 😊",
+        parse_mode="Markdown"
+    )
+    await send_calendar_with_options(target_msg, chat_id)
+    return ConversationHandler.END
+
+async def cancel_email_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("구글 계정 변경이 취소되었습니다.")
+    return ConversationHandler.END
 
 async def faq_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_msg = update.effective_message
@@ -519,7 +607,21 @@ def main():
         allow_reentry=True
     )
     
+    # 구글 계정 이메일 변경 대화 핸들러
+    email_conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("email", start_email_change),
+            CallbackQueryHandler(start_email_change, pattern="^change_google_email$")
+        ],
+        states={
+            WAIT_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_google_email)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_email_change)],
+        allow_reentry=True
+    )
+    
     app.add_handler(conv_handler)
+    app.add_handler(email_conv_handler)
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("calendar", calendar_cmd))
     app.add_handler(CommandHandler("faq", faq_cmd))

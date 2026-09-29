@@ -72,9 +72,10 @@ def generate_ics_calendar(chat_id: int) -> bytes:
 
 import urllib.parse
 
-def get_google_calendar_url(round_num: int, recog_date_str: str, attend_type: str, act_type: str, req_count: int, note: str = "") -> str:
+def get_google_calendar_url(round_num: int, recog_date_str: str, attend_type: str, act_type: str, req_count: int, note: str = "", google_email: str = "") -> str:
     """
     구글 캘린더 웹에서 클릭 한 번으로 새 일정을 추가할 수 있는 웹 URL 생성
+    (google_email이 제공되면 해당 계정으로 즉시 전환되는 authuser 파라미터 자동 적용)
     """
     # YYYY-MM-DD -> YYYYMMDD
     d_clean = recog_date_str.replace("-", "")
@@ -99,5 +100,8 @@ def get_google_calendar_url(round_num: int, recog_date_str: str, attend_type: st
         "details": desc,
         "location": "부산지방고용노동청 부산북부고용센터 3층 11번 창구 (또는 고용24 온라인)"
     }
+    if google_email:
+        params["authuser"] = google_email.strip()
+        
     return f"https://calendar.google.com/calendar/render?{urllib.parse.urlencode(params)}"
 
